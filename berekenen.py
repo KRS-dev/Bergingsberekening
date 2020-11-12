@@ -1,16 +1,37 @@
 
+#%% hulp functie
+import time
+
+class timer():
+    def __init__(self):
+        self.begin_tijd = 0
+        self.eind_tijd = 0
+           
+    def __enter__(self):
+        self.begin_tijd = time.time()
+        
+    def __exit__(self, *args):
+        self.eind_tijd = time.time()
+        print('Time elapsed [s]: {}'.format(self.eind_tijd-self.begin_tijd))
+
+
+#%%
+
 
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 df_knp = pd.read_csv('knp.csv', delimiter=';')
 df_lei = pd.read_csv('leidingen.csv', delimiter=';')
 
+
+#%% Inlezen van Knooppunten
 knp = df_knp['knp'].values
 
 
-#%%
+
 
 knp_1 = df_lei['knp 1'].values
 knp_2 = df_lei['knp 2'].values
@@ -29,7 +50,8 @@ if (np.isnan(bob_1) ^ np.isnan(bob_2)).any():
         nanbob_2 = np.isnan(bob_2)
         bob_2[nanbob_2] = bob_1[nanbob_2]
         nanbobs += sum(nanbob_2)
-    
+        
+#%% Opzetten BOB matrix
     
 
 
@@ -62,7 +84,7 @@ for startput, eindput, bob_1_, bob_2_ in zip(knp_1, knp_2, bob_1, bob_2):
     
     
 
-#%% Dijkstra algortithme voor waterstand
+#%% Dijkstra algorithme voor waterstand
 
 
 wachtrij = np.full(n, True, dtype=bool)
@@ -112,7 +134,7 @@ while True:
     
 
 
-#%% leidingen
+#%% Verlorenberging Waterstand bij begin en eindpunt leiding toevoegen
 def leiding_waterstand(knp, waterstand, knp_1, knp_2):
     """
     Voegt de waterstand uit de dijkstra berekening toe aan een lijst met
@@ -146,12 +168,18 @@ def leiding_waterstand(knp, waterstand, knp_1, knp_2):
 
 knp_1_ws, knp_2_ws = leiding_waterstand(knp, waterstand, knp_1, knp_2)
 
-lengte= df_lei['lengte'].values
+#%% Inlezen Leidingen tabel
+
+lengte = df_lei['lengte'].values
 breedte = df_lei['breedte'].values
 vorm = df_lei['vorm'].values
 hoogte = df_lei['hoogte'].values
+
+# Bij ronde buizen is de hoogte==breedte
 hoogte[vorm==0] = breedte[vorm==0]
 
+
+#%% Volume berekeningen voor de Bergingskromme
 def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
     """
     Berekend het volume water in een leiding waarvan de waterstanden aan beide 
@@ -245,38 +273,62 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
                     volume += dL*A_vol
     return volume
 
-riool_waterstanden = np.arange(np.min(putbodem), np.max(waterstand), 0.01)
-array_wat_vol_lei = [] # Volume gevuld bij een rioolwaterstand.
-array_ver_berg = [] #verloren berging
-for r_ws in riool_waterstanden:
-    
-    #Inhoud leidingen
-    volume_water_lei = 0
-    verloren_berging = 0
-    for knp_1_ws_, knp_2_ws_, bob_1_, bob_2_, l, b, vorm_, h in zip(knp_1_ws, knp_2_ws, bob_1, bob_2, lengte, breedte, vorm, hoogte):
-           
-        if r_ws >= knp_1_ws_:
-            ws_ver_berg_1 = knp_1_ws_
-        else:
-            ws_ver_berg_1 = r_ws
-        if r_ws >= knp_2_ws_:
-            ws_ver_berg_2 = knp_2_ws_
-        else:
-            ws_ver_berg_2 = r_ws
-        
-        
-        volume_water_lei += volume_berekenen(r_ws, r_ws, bob_1_, bob_2_, h, b, l, vorm_)
-        verloren_berging += volume_berekenen(ws_ver_berg_1, ws_ver_berg_2, bob_1_, bob_2_, h, b, l, vorm_)
-        
-    
-        
-    array_wat_vol_lei.append(volume_water_lei)
-    array_ver_berg.append(verloren_berging)
-    
-array_wat_vol_lei = np.array(array_wat_vol_lei)
-array_ver_berg = np.array(array_ver_berg)
 
-array_berg = array_wat_vol_lei - array_ver_berg
+riool_waterstanden = np.arange(np.min(putbodem), np.max(waterstand), 0.01) # min: riool is leeg, max: riool is compleet gevuld
+array_wat_vol_lei = [] # Volume gevuld bij een rioolwaterstand.
+array_ver_berg = [] # Verloren berging bij een rioolwaterstand
+
+with timer():
+    vol_volume = np.full(len(bob_1), 0, dtype=float)
+    bool_vol = np.full(len(bob_1), False, dtype=bool)
+    vol_verloren_volume = np.full(len(bob_1), 0, dtype=float)
+    bool_vol_verloren = np.full(len(bob_1), False, dtype=bool)
+    
+    for r_ws in riool_waterstanden:
+        
+        volume_water_lei = 0 # Totale volume water in leiding
+        verloren_berging = 0 # Volume water dat verloren berging is
+        
+        for i, (knp_1_ws_, knp_2_ws_, bob_1_, bob_2_, l, b, vorm_, h) in enumerate(zip(knp_1_ws, knp_2_ws, bob_1, bob_2, lengte, breedte, vorm, hoogte)):
+            
+            # Als de riool waterstand hoger is dan verloren berging waterstand dan h
+            if r_ws >= knp_1_ws_:
+                ws_ver_berg_1 = knp_1_ws_
+            else:
+                ws_ver_berg_1 = r_ws
+            if r_ws >= knp_2_ws_:
+                ws_ver_berg_2 = knp_2_ws_
+            else:
+                ws_ver_berg_2 = r_ws
+            
+            if (r_ws >= bob_1_ + h) & (r_ws >= bob_2_ + h):
+                if bool_vol[i]:
+                    volume_water_lei += vol_volume[i]
+                else:
+                    vol_volume[i] = volume_berekenen(r_ws, r_ws, bob_1_, bob_2_, h, b, l, vorm_)
+                    bool_vol[i] = True
+                    volume_water_lei += vol_volume[i]
+            else:
+                volume_water_lei += volume_berekenen(r_ws, r_ws, bob_1_, bob_2_, h, b, l, vorm_)
+            
+            if (r_ws >= knp_1_ws_) & (r_ws >= knp_2_ws_):
+                if bool_vol_verloren[i]:
+                    verloren_berging += vol_verloren_volume[i]
+                else:
+                    vol_verloren_volume[i] = volume_berekenen(ws_ver_berg_1, ws_ver_berg_2, bob_1_, bob_2_, h, b, l, vorm_)
+                    bool_vol_verloren[i] = True
+                    verloren_berging += vol_verloren_volume[i]
+            else:
+                verloren_berging += volume_berekenen(ws_ver_berg_1, ws_ver_berg_2, bob_1_, bob_2_, h, b, l, vorm_)
+            
+            
+        array_wat_vol_lei.append(volume_water_lei)
+        array_ver_berg.append(verloren_berging)
+            
+    array_wat_vol_lei = np.array(array_wat_vol_lei)
+    array_ver_berg = np.array(array_ver_berg)
+    
+array_berg = array_wat_vol_lei - array_ver_berg # totaal volume - verloren berging
 #%% plot bergingskromme
 
 plt.figure(figsize=(20,10))
