@@ -206,8 +206,9 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
         Vorm van de leiding.
         0: cilinder vormig (rond)
         1: eivormig
-        2: 
-            ...
+        2: rechthoekig
+        3: muilvormig
+        4: vierkant
 
     Returns
     -------
@@ -226,7 +227,15 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
         elif vorm==1:
             A_lei = 0.510*h**2
             volume = A_lei * l
-        #elif vorm==2:
+        elif vorm==2:
+            A_lei = h*b
+            volume = A_lei * l
+        elif vorm==3:
+            A_lei = 0.7645 * h * b
+            volume = A_lei * l
+        elif vorm==4:
+            A_lei = h * b
+            volume = A_lei * l
             
     elif ws_1 >= bob_1 or ws_2 >= bob_2:
         N_seg = int(round(l*10) - 1)
@@ -239,8 +248,8 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
         else:
             ws_lin = np.linspace(min([ws_1, ws_2]), max([ws_1, ws_2]), N_seg + 1) # Waterstand linear geinterpoleerd over lengte buis
             ws_seg = (ws_lin[1::] + ws_lin[0:-1])/2
-        segment_whs = ws_seg - bob_seg #Waterhoogtes per segment van de buis
-        segment_whs[segment_whs < 0] = 0 #Negatieve waterhoogtes kennen we niet
+        segment_whs = ws_seg - bob_seg #Waterdieptes per segment van de buis
+        segment_whs[segment_whs < 0] = 0 #Negatieve waterdieptes kennen we niet
         
         if vorm==0:
             for segment_wh in segment_whs:
@@ -271,6 +280,34 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
                     A_rel_vol = wh*x[0] + wh**2*x[1] + wh**3*x[2] + wh**4*x[3] + wh**5*x[4] + wh**6*x[5] 
                     A_vol = A_totaal * A_rel_vol # Gevuld oppervlakte
                     volume += dL*A_vol
+        elif vorm==2:
+            for segment_wh in segment_whs:
+                A_totaal = 0.510*h**2
+                if segment_wh >= h:
+                    volume += dL*h
+                else:
+                    volume += dL*segment_wh
+        elif vorm==3:
+            for segment_wh in segment_whs:
+                A_totaal = 0.7645 * h * b
+                if segment_wh >= h:
+                    volume += dL*A_totaal
+                else:
+                    # Eerste zes polynomale coefficienten die de waterhoogte vs. wateroppervlak benaderen
+                    x = [1.4114, -6.9511, 12.33, -11.014, 5.0266, 0.1994]
+                    wh = segment_wh/h #genormaliseerde diepte [0,1] m
+                    # genormaliseerd oppervlak [0,1] 
+                    A_rel_vol = wh*x[0] + wh**2*x[1] + wh**3*x[2] + wh**4*x[3] + wh**5*x[4] + wh**6*x[5] 
+                    A_vol = A_totaal * A_rel_vol # Gevuld oppervlakte
+                    volume += dL*A_vol
+        elif vorm == 4:
+            for segment_wh in segment_whs:
+                if segment_wh >= h:
+                    A_water = h**2
+                    volume += dL*A_water
+                else:
+                    A_water = h*segment_wh
+                    volume += dL * A_water
     return volume
 
 
@@ -332,6 +369,7 @@ array_berg = array_wat_vol_lei - array_ver_berg # totaal volume - verloren bergi
 #%% plot bergingskromme
 
 plt.figure(figsize=(20,10))
+
 plt.plot(array_ver_berg, riool_waterstanden, array_wat_vol_lei, riool_waterstanden, array_berg, riool_waterstanden)
 plt.legend(['Verloren berging [m3]', 'Totale inhoud [m3]', 'Berging [m3]'])
 
