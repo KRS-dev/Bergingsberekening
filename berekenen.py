@@ -14,127 +14,7 @@ class timer():
         self.eind_tijd = time.time()
         print('Time elapsed [s]: {}'.format(self.eind_tijd-self.begin_tijd))
 
-
-#%%
-
-
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-df_knp = pd.read_csv('knp.csv', delimiter=';')
-df_lei = pd.read_csv('leidingen.csv', delimiter=';')
-
-
-#%% Inlezen van Knooppunten
-knp = df_knp['knp'].values
-
-
-
-
-knp_1 = df_lei['knp 1'].values
-knp_2 = df_lei['knp 2'].values
-bob_1 = df_lei['bob 1'].values
-bob_2 = df_lei['bob2'].values
-
-assert (~np.isnan(bob_1) +  ~np.isnan(bob_2)).all(), 'Een leiding mist beide bob waardes.'
-
-if (np.isnan(bob_1) ^ np.isnan(bob_2)).any():
-    nanbobs = 0
-    if np.isnan(bob_1).any():
-        nanbob_1 = np.isnan(bob_1)
-        bob_1[nanbob_1] = bob_2[nanbob_1]
-        nanbobs += sum(nanbob_1)
-    if np.isnan(bob_2).any():
-        nanbob_2 = np.isnan(bob_2)
-        bob_2[nanbob_2] = bob_1[nanbob_2]
-        nanbobs += sum(nanbob_2)
-        
-#%% Opzetten BOB matrix
-    
-
-
-n = len(knp) # aantal knopen
-
-Inf = np.Infinity #Begin waardes bij de knooppunten
-
-putbodem = np.full(n, Inf, dtype=np.float64)
-bob = np.full((n,n), Inf, dtype=np.float64)
-
-for startput, eindput, bob_1_, bob_2_ in zip(knp_1, knp_2, bob_1, bob_2):
-    
-    for j, put in enumerate(knp):
-        if put == startput:
-            j1 = j
-            if putbodem[j] > bob_1_:
-                putbodem[j] = bob_1_
-        if put == eindput:
-            j2 = j
-            if putbodem[j] > bob_2_:
-                putbodem[j] = bob_2_
-    
-    if bob_1_ > bob_2_:
-        bob[j1, j2] = bob_1_
-    else:
-        bob[j1, j2] = bob_2_
-    
-    # Bob matrix is symmetrisch
-    bob[j2, j1] = bob[j1,j2]
-    
-    
-
-#%% Dijkstra algorithme voor waterstand
-
-
-wachtrij = np.full(n, True, dtype=bool)
-vorige_ind = np.full(n, -1, dtype=np.int64) #Numpy does not allow NaN values in integer matrices/vectors
-vorige_knp = np.full(n, -1, dtype=np.int64)
-waterstand = np.full(n, Inf, dtype=np.float64)
-
-beginput = 201829
-
-for i, putnummer in enumerate(knp):
-    if putnummer == beginput:
-        waterstand[i] = putbodem[i] - 0.01
-# Correctie met 0.01 voor drempelbepaling
-
-
-
-# Dijkstra algorithme
-while True:
-    dist = Inf
-    
-    for i, knp_i in enumerate(knp):
-        if wachtrij[i]:
-            if waterstand[i] < dist:
-                dist = waterstand[i]
-                u = i
-                knp_u = knp_i
-    
-    
-    if dist == Inf:
-        break
-    
-    
-    wachtrij[u] = False
-    
-    for j, knp_ in enumerate(knp):
-        if wachtrij[j] and bob[u, j] != Inf:
-          
-            if waterstand[u] > bob[u, j]:
-                alt = waterstand[u]
-            else:
-                alt = bob[u,j]
-            
-            if alt < waterstand[j]:
-                waterstand[j] = alt
-                vorige_ind[j] = u
-                vorige_knp[j] = knp_u
-    
-
-
-#%% Verlorenberging Waterstand bij begin en eindpunt leiding toevoegen
+#%% Functies
 def leiding_waterstand(knp, waterstand, knp_1, knp_2):
     """
     Voegt de waterstand uit de dijkstra berekening toe aan een lijst met
@@ -166,20 +46,6 @@ def leiding_waterstand(knp, waterstand, knp_1, knp_2):
         knp_2_ws_list.append(waterstand[knp == knp_2_][0])
     return np.array(knp_1_ws_list), np.array(knp_2_ws_list)
 
-knp_1_ws, knp_2_ws = leiding_waterstand(knp, waterstand, knp_1, knp_2)
-
-#%% Inlezen Leidingen tabel
-
-lengte = df_lei['lengte'].values
-breedte = df_lei['breedte'].values
-vorm = df_lei['vorm'].values
-hoogte = df_lei['hoogte'].values
-
-# Bij ronde buizen is de hoogte==breedte
-hoogte[vorm==0] = breedte[vorm==0]
-
-
-#%% Volume berekeningen voor de Bergingskromme
 def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
     """
     Berekend het volume water in een leiding waarvan de waterstanden aan beide 
@@ -208,7 +74,6 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
         1: eivormig
         2: rechthoekig
         3: muilvormig
-        4: vierkant
 
     Returns
     -------
@@ -232,9 +97,6 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
             volume = A_lei * l
         elif vorm==3:
             A_lei = 0.7645 * h * b
-            volume = A_lei * l
-        elif vorm==4:
-            A_lei = h * b
             volume = A_lei * l
             
     elif ws_1 >= bob_1 or ws_2 >= bob_2:
@@ -300,44 +162,219 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
                     A_rel_vol = wh*x[0] + wh**2*x[1] + wh**3*x[2] + wh**4*x[3] + wh**5*x[4] + wh**6*x[5] 
                     A_vol = A_totaal * A_rel_vol # Gevuld oppervlakte
                     volume += dL*A_vol
-        elif vorm == 4:
-            for segment_wh in segment_whs:
-                if segment_wh >= h:
-                    A_water = h**2
-                    volume += dL*A_water
-                else:
-                    A_water = h*segment_wh
-                    volume += dL * A_water
+
     return volume
 
 
-riool_waterstanden = np.arange(np.min(putbodem), np.max(waterstand), 0.01) # min: riool is leeg, max: riool is compleet gevuld
-array_wat_vol_lei = [] # Volume gevuld bij een rioolwaterstand.
-array_ver_berg = [] # Verloren berging bij een rioolwaterstand
+#%%
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
-with timer():
-    vol_volume = np.full(len(bob_1), 0, dtype=float)
-    bool_vol = np.full(len(bob_1), False, dtype=bool)
-    vol_verloren_volume = np.full(len(bob_1), 0, dtype=float)
-    bool_vol_verloren = np.full(len(bob_1), False, dtype=bool)
+df_knp = pd.read_csv('knp.csv', delimiter=';')
+df_lei = pd.read_csv('leidingen.csv', delimiter=';')
+
+
+#%% Inlezen van Knooppunten
+
+
+
+
+
+put_1 = df_lei['knp 1'].values
+put_2 = df_lei['knp 2'].values
+bob_1 = df_lei['bob 1'].values
+bob_2 = df_lei['bob2'].values
+
+
+assert (~np.isnan(bob_1) +  ~np.isnan(bob_2)).all(), 'Een leiding mist beide bob waardes.'
+
+if (np.isnan(bob_1) ^ np.isnan(bob_2)).any():
+    nanbobs = 0
+    if np.isnan(bob_1).any():
+        nanbob_1 = np.isnan(bob_1)
+        bob_1[nanbob_1] = bob_2[nanbob_1]
+        nanbobs += sum(nanbob_1)
+    if np.isnan(bob_2).any():
+        nanbob_2 = np.isnan(bob_2)
+        bob_2[nanbob_2] = bob_1[nanbob_2]
+        nanbobs += sum(nanbob_2)
+#%% Inlezen Leidingen tabel
+
+lengte = df_lei['lengte'].values
+breedte = df_lei['breedte'].values
+vorm = df_lei['vorm'].values
+hoogte = df_lei['hoogte'].values
+
+# Bij ronde buizen is de hoogte==breedte
+hoogte[vorm==0] = breedte[vorm==0]
+
+
+#%% bergingsberekening functie
+
+def bergingsberekening(
+        put_1,
+        put_2,
+        bob_1,
+        bob_2,
+        lengte,
+        vorm,
+        hoogte,
+        breedte,
+        begin_put,
+        overstorten
+        ):
+    '''
+    Parameters
+    ----------
+    put_1 : np.array of int
+        beginput.
+    put_2 : np.array of int
+        eindput.
+    bob_1 : np.array of float
+        bovenkant onderkant buis begin.
+    bob_2 : np.array of float
+        bob eind.
+    lengte : np.array of float
+        lengte buis.
+    vorm : np.array of varchar
+        Vorm van de leiding.
+        'RO': cilinder vormig (rond)
+        'EI': eivormig
+        'RE': rechthoekig
+        'MU': muilvormig
+    hoogte : np.array of float
+        hoogte/diameter buis.
+    breedte : np.array of float, nullable
+        breedte buis.
+    begin_put : int
+        Afvoer put waar het gemaal geplaatst is.
+    overstorten : list or np.array
+        Lijst aan overstortdrempel niveaus in het rioleringstelsel .
+
+    Returns
+    -------
+    None.
+
+    '''
+    putten = np.unique(np.concatenate([put_1, put_2])) #Unieke putten
+    
+    n = len(putten)
+    
+    Inf = np.Infinity
+    
+    putbodem = np.full(n, Inf, dtype=np.float64) # Laagste bob bij een put
+    
+    bob_graaf = np.full((n,n), Inf, dtype=np.float64)  
+    # Vierkante matrix van putten x putten, put[i] heeft een connectie met put[j]
+    # dus er is non-infinite bobwaarde in de bob_graaf[i,j] = max(bob_1, bob_2)
+    # het waterniveau in het systeem moet hoger zijn dan max(bob_1, bob_2) om
+    # van put[i] naar put[j] te stromen
+    
+    for startput, eindput, bob_1_, bob_2_ in zip(put_1, put_2, bob_1, bob_2):
+    
+        for j, put in enumerate(putten):
+            if put == startput:
+                j1 = j
+                if putbodem[j] > bob_1_:
+                    putbodem[j] = bob_1_
+            if put == eindput:
+                j2 = j
+                if putbodem[j] > bob_2_:
+                    putbodem[j] = bob_2_
+        
+        
+        bob_graaf[j1, j2] = max([bob_1_, bob_2_])
+        # Bob graafmatrix is symmetrisch
+        bob_graaf[j2, j1] = bob_graaf[j1,j2]
+        
+        
+    wachtrij = np.full(n, True, dtype=bool)
+    vorige_i = np.full(n, -1, dtype=np.int64) 
+    vorige_put = np.full(n, -1, dtype=np.int64)
+    waterstand = np.full(n, Inf, dtype=np.float64) #Verloren waterstand
+    
+    # Zorg dat de bemalingsput/beginput leeg is, waterstand == bob
+    # De -0.01 extra werd door Albert kemeling aanbevolen
+    waterstand[putten == beginput] = putbodem[putten == beginput] -.01
+    ###Dijkstra
+    while True:
+        dist = Inf
+        
+        for i, put_i in enumerate(putten):
+            if wachtrij[i]:
+                if waterstand[i] < dist:
+                    dist = waterstand[i]
+                    u = i
+                    put_u = put_i
+        
+        
+        if dist == Inf:
+            break
+        
+        
+        wachtrij[u] = False
+        
+        for j, put_ in enumerate(putten):
+            if wachtrij[j] and bob_graaf[u, j] != Inf:
+              
+                if waterstand[u] > bob_graaf[u, j]:
+                    alt = waterstand[u]
+                else:
+                    alt = bob_graaf[u,j]
+                
+                if alt < waterstand[j]:
+                    waterstand[j] = alt
+                    vorige_i[j] = u
+                    vorige_put[j] = put_u
+    
+    
+
+    
+    
+    ### bergingskromme
+    
+    #Verloren waterstand wordt bij beginput en eindput van elk streng gezocht
+    put_1_ws, put_2_ws = leiding_waterstand(putten, waterstand, put_1, put_2)
+    
+    N_streng = len(bob_1)
+    
+    # De volgende arrays zijn ervoor om te verkomen dat het volle (verloren) volume
+    # van strengen niet meerdere keren berekend wordt.
+    # elke streng krijgt een ruimte om het volle volume op te slaan en de 
+    # boolean: bool_vol en bool_vol_verloren zorgen ervoor dat ze bij de volgende
+    # iteratie overgeslagen worden.
+    vol_volume = np.full(N_streng, 0, dtype=float) 
+    bool_vol = np.full(N_streng, False, dtype=bool)
+    vol_verloren_volume = np.full(N_streng, 0, dtype=float)
+    bool_vol_verloren = np.full(N_streng, False, dtype=bool)
+    
+    list_volume_water = []
+    list_volume_verlorenberging = []
+    
+    
+    riool_waterstanden = np.arange(np.nanmin(putbodem), np.nanmax(waterstand), 0.01) # min: riool is leeg, max: riool is compleet gevuld
     
     for r_ws in riool_waterstanden:
         
-        volume_water_lei = 0 # Totale volume water in leiding
-        verloren_berging = 0 # Volume water dat verloren berging is
+        volume_water_lei = 0 # Totale volume water in de strengen bij water niveau r_ws
+        verloren_berging = 0 # Volume verloren berging
         
-        for i, (knp_1_ws_, knp_2_ws_, bob_1_, bob_2_, l, b, vorm_, h) in enumerate(zip(knp_1_ws, knp_2_ws, bob_1, bob_2, lengte, breedte, vorm, hoogte)):
+        for i, (put_1_ws_, put_2_ws_, bob_1_, bob_2_, l, b, vorm_, h) in enumerate(zip(put_1_ws, put_2_ws, bob_1, bob_2, lengte, breedte, vorm, hoogte)):
             
             # Als de riool waterstand hoger is dan verloren berging waterstand dan h
-            if r_ws >= knp_1_ws_:
-                ws_ver_berg_1 = knp_1_ws_
+            if r_ws >= put_1_ws_:
+                ws_ver_berg_1 = put_1_ws_
             else:
                 ws_ver_berg_1 = r_ws
-            if r_ws >= knp_2_ws_:
-                ws_ver_berg_2 = knp_2_ws_
+                
+            if r_ws >= put_2_ws_:
+                ws_ver_berg_2 = put_2_ws_
             else:
                 ws_ver_berg_2 = r_ws
             
+            # Komt r_ws boven BBB uit? dan is de streng vol. 
+            # Reken anders het gedeeltelijk volume uit
             if (r_ws >= bob_1_ + h) & (r_ws >= bob_2_ + h):
                 if bool_vol[i]:
                     volume_water_lei += vol_volume[i]
@@ -348,7 +385,9 @@ with timer():
             else:
                 volume_water_lei += volume_berekenen(r_ws, r_ws, bob_1_, bob_2_, h, b, l, vorm_)
             
-            if (r_ws >= knp_1_ws_) & (r_ws >= knp_2_ws_):
+            # Komt r_ws boven de verloren waterstand uit? Dan is de verloren berging compleet gevuld
+            # Reken anders de gedeeltelijke verloren berging uit.
+            if (r_ws >= put_1_ws_) & (r_ws >= put_2_ws_):
                 if bool_vol_verloren[i]:
                     verloren_berging += vol_verloren_volume[i]
                 else:
@@ -358,20 +397,36 @@ with timer():
             else:
                 verloren_berging += volume_berekenen(ws_ver_berg_1, ws_ver_berg_2, bob_1_, bob_2_, h, b, l, vorm_)
             
-            
-        array_wat_vol_lei.append(volume_water_lei)
-        array_ver_berg.append(verloren_berging)
-            
-    array_wat_vol_lei = np.array(array_wat_vol_lei)
-    array_ver_berg = np.array(array_ver_berg)
+        
+        list_volume_water.append(volume_water_lei)
+        list_volume_verlorenberging.append(verloren_berging)
     
-array_berg = array_wat_vol_lei - array_ver_berg # totaal volume - verloren berging
-#%% plot bergingskromme
+    # Maak arrays van de lijst data
+    array_volume_water = np.array(list_volume_water)
+    array_verlorenberging = np.array(list_volume_verlorenberging)
+    
+    array_berging = array_volume_water - array_verlorenberging # totaal volume - verloren berging
+    
+    
+    ###
+    plt.figure(figsize=(20,10))
+    
+    plt.plot(array_volume_water, riool_waterstanden, array_verlorenberging, riool_waterstanden, array_berging, riool_waterstanden)
+    plt.legend(['Totale inhoud [m3]', 'Verloren berging [m3]',  'Berging [m3]'])
+    
+    for overstort in overstorten:
+        plt.plot([np.min(array_volume_water), np.max(array_volume_water)], [overstort, overstort])
+    
 
-plt.figure(figsize=(20,10))
+#%%
 
-plt.plot(array_ver_berg, riool_waterstanden, array_wat_vol_lei, riool_waterstanden, array_berg, riool_waterstanden)
-plt.legend(['Verloren berging [m3]', 'Totale inhoud [m3]', 'Berging [m3]'])
+
+ovs = [2, 1]
+beginput = 201829
+bergingsberekening(put_1, put_2, bob_1, bob_2, lengte, vorm, hoogte, breedte, beginput, ovs)
+
+
+
 
 #%% Afvoerend oppervlak
 df_afv = pd.read_csv('afv.csv', delimiter=';')
