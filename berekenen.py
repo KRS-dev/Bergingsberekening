@@ -185,8 +185,18 @@ put_1 = df_lei['knp 1'].values
 put_2 = df_lei['knp 2'].values
 bob_1 = df_lei['bob 1'].values
 bob_2 = df_lei['bob2'].values
+#%% Inlezen Leidingen tabel
+
+lengte = df_lei['lengte'].values
+breedte = df_lei['breedte'].values
+vorm = df_lei['vorm'].values
+hoogte = df_lei['hoogte'].values
+
+# Bij ronde buizen is de hoogte==breedte
+hoogte[vorm==0] = breedte[vorm==0]
 
 
+#%%
 assert (~np.isnan(bob_1) +  ~np.isnan(bob_2)).all(), 'Een leiding mist beide bob waardes.'
 
 if (np.isnan(bob_1) ^ np.isnan(bob_2)).any():
@@ -199,15 +209,7 @@ if (np.isnan(bob_1) ^ np.isnan(bob_2)).any():
         nanbob_2 = np.isnan(bob_2)
         bob_2[nanbob_2] = bob_1[nanbob_2]
         nanbobs += sum(nanbob_2)
-#%% Inlezen Leidingen tabel
 
-lengte = df_lei['lengte'].values
-breedte = df_lei['breedte'].values
-vorm = df_lei['vorm'].values
-hoogte = df_lei['hoogte'].values
-
-# Bij ronde buizen is de hoogte==breedte
-hoogte[vorm==0] = breedte[vorm==0]
 
 
 #%% bergingsberekening functie
@@ -408,29 +410,47 @@ def bergingsberekening(
     array_berging = array_volume_water - array_verlorenberging # totaal volume - verloren berging
     
     
-    ###
-    plt.figure(figsize=(20,10))
+    ### Plotting
+    fig = plt.figure(figsize=(20,12))
     
     plt.plot(array_volume_water, riool_waterstanden, array_verlorenberging, riool_waterstanden, array_berging, riool_waterstanden)
-    plt.legend(['Totale inhoud [m3]', 'Verloren berging [m3]',  'Berging [m3]'])
+    plt.legend(['Totale inhoud [$m^3$]', 'Verloren berging [$m^3$]',  'Berging [$m^3$]'])
     
     for overstort in overstorten:
         plt.plot([np.min(array_volume_water), np.max(array_volume_water)], [overstort, overstort])
+    plt.xlabel('$m^3$')
+    plt.ylabel('$mNAP$')
     
+    
+    b = riool_waterstanden < np.min(overstorten)
+    
+    volume_ovs = np.max(array_volume_water[b])
+    verloren_berg_ovs = np.max(array_verlorenberging[b])
+    berg_ovs = np.max(array_berging[b])
+    
+    text = ('Overstortdrempel= {:.1f} $mNAP$ \nOnder overstort:\nTotaal volume= {:.2f} $m^3$'.format(np.min(overstorten), volume_ovs) +
+    '\nVerloren berging = {:.2f} $m^3$\nBerging = {:.2f} $m^3$'.format(verloren_berg_ovs, berg_ovs))
+    
+    ax = plt.gca()
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    ax.text(0.70, 0.20, text, transform=ax.transAxes, fontsize=14,
+            verticalalignment='top', bbox=props)
+    
+    return fig    
 
 #%%
 
 
 ovs = [2, 1]
 beginput = 201829
-bergingsberekening(put_1, put_2, bob_1, bob_2, lengte, vorm, hoogte, breedte, beginput, ovs)
+fig = bergingsberekening(put_1, put_2, bob_1, bob_2, lengte, vorm, hoogte, breedte, beginput, ovs)
 
-
+ax = fig.axes[0]
 
 
 #%% Afvoerend oppervlak
 df_afv = pd.read_csv('afv.csv', delimiter=';')
-nlei = len(knp_1)
+nlei = len(put_1)
 
 geslhell = np.nansum(df_afv['gesl hell'])
 geslvlak = np.nansum(df_afv['gesl vlak'])
