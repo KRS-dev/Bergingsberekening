@@ -1,26 +1,8 @@
-
-#%% hulp functie
-import time
-
-class timer():
-    def __init__(self):
-        self.begin_tijd = 0
-        self.eind_tijd = 0
-           
-    def __enter__(self):
-        self.begin_tijd = time.time()
-        
-    def __exit__(self, *args):
-        self.eind_tijd = time.time()
-        print('Time elapsed [s]: {}'.format(self.eind_tijd-self.begin_tijd))
-
-#%% Functies
 def leiding_waterstand(knp, waterstand, knp_1, knp_2):
     """
     Voegt de waterstand uit de dijkstra berekening toe aan een lijst met
     waterstanden voor de leidingen. Knooppunt 1 is het beginpunt van een
     leiding. Knooppunt 2 is het eindpunt van een leiding.
-
     Parameters
     ----------
     knp : np.array
@@ -32,7 +14,6 @@ def leiding_waterstand(knp, waterstand, knp_1, knp_2):
         Eerste knooppunten lijst voor alle leidingen.
     knp_2 : np.array
         Tweede knooppunten lijst voor alle leidingen.
-
     Returns
     -------
     np.array
@@ -51,7 +32,6 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
     Berekend het volume water in een leiding waarvan de waterstanden aan beide 
     kanten bekent is. Als de leiding niet volledig gevuld is, wordt de
     waterstand linear geinterpoleerd over de buis en in segmenten uitgerekend.
-
     Parameters
     ----------
     ws_1 : float
@@ -70,32 +50,30 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
         lengte leiding [m].
     vorm : int
         Vorm van de leiding.
-        0: cilinder vormig (rond)
-        1: eivormig
-        2: rechthoekig
-        3: muilvormig
-
+        'RO': cilinder vormig (rond)
+        'EI': eivormig
+        'RE': rechthoekig
+        'MU': muilvormig
     Returns
     -------
     volume : float
         Volume water in de leiding.
-
     """
     volume = 0
     bbb_1 = bob_1 + h
     bbb_2 = bob_2 + h
     
     if (ws_1 >= bbb_1) & (ws_2 >= bbb_2):
-        if vorm==0:
+        if vorm=='RO':
             A_lei = np.pi*(.5*h)**2
             volume = A_lei * l
-        elif vorm==1:
+        elif vorm=='EI':
             A_lei = 0.510*h**2
             volume = A_lei * l
-        elif vorm==2:
+        elif vorm=='RE':
             A_lei = h*b
             volume = A_lei * l
-        elif vorm==3:
+        elif vorm=='MU':
             A_lei = 0.7645 * h * b
             volume = A_lei * l
             
@@ -113,7 +91,7 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
         segment_whs = ws_seg - bob_seg #Waterdieptes per segment van de buis
         segment_whs[segment_whs < 0] = 0 #Negatieve waterdieptes kennen we niet
         
-        if vorm==0:
+        if vorm=='RO':
             for segment_wh in segment_whs:
                 R = .5*h #Radius buis
                 if segment_wh >= 2*R:
@@ -129,7 +107,7 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
                     theta = 2*np.arccos((R-segment_wh)/R)
                     A_water = R**2/2*(theta - np.sin(theta))
                     volume += dL*A_water
-        elif vorm==1:
+        elif vorm=='EI':
             for segment_wh in segment_whs:
                 A_totaal = 0.510*h**2
                 if segment_wh >= h:
@@ -142,14 +120,14 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
                     A_rel_vol = wh*x[0] + wh**2*x[1] + wh**3*x[2] + wh**4*x[3] + wh**5*x[4] + wh**6*x[5] 
                     A_vol = A_totaal * A_rel_vol # Gevuld oppervlakte
                     volume += dL*A_vol
-        elif vorm==2:
+        elif vorm=='RE':
             for segment_wh in segment_whs:
                 A_totaal = 0.510*h**2
                 if segment_wh >= h:
                     volume += dL*h
                 else:
                     volume += dL*segment_wh
-        elif vorm==3:
+        elif vorm=='MU':
             for segment_wh in segment_whs:
                 A_totaal = 0.7645 * h * b
                 if segment_wh >= h:
@@ -157,7 +135,7 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
                 else:
                     # Eerste zes polynomale coefficienten die de waterhoogte vs. wateroppervlak benaderen
                     x = [1.4114, -6.9511, 12.33, -11.014, 5.0266, 0.1994]
-                    wh = segment_wh/h #genormaliseerde diepte [0,1] m
+                    wh = segment_wh/h #genormaliseerde diepte [0,1] m/m
                     # genormaliseerd oppervlak [0,1] 
                     A_rel_vol = wh*x[0] + wh**2*x[1] + wh**3*x[2] + wh**4*x[3] + wh**5*x[4] + wh**6*x[5] 
                     A_vol = A_totaal * A_rel_vol # Gevuld oppervlakte
@@ -165,56 +143,9 @@ def volume_berekenen(ws_1, ws_2, bob_1, bob_2, h, b, l, vorm):
 
     return volume
 
-
-#%%
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-df_knp = pd.read_csv('knp.csv', delimiter=';')
-df_lei = pd.read_csv('leidingen.csv', delimiter=';')
-
-
-#%% Inlezen van Knooppunten
-
-
-
-
-
-put_1 = df_lei['knp 1'].values
-put_2 = df_lei['knp 2'].values
-bob_1 = df_lei['bob 1'].values
-bob_2 = df_lei['bob2'].values
-#%% Inlezen Leidingen tabel
-
-lengte = df_lei['lengte'].values
-breedte = df_lei['breedte'].values
-vorm = df_lei['vorm'].values
-hoogte = df_lei['hoogte'].values
-
-# Bij ronde buizen is de hoogte==breedte
-hoogte[vorm==0] = breedte[vorm==0]
-
-
-#%%
-assert (~np.isnan(bob_1) +  ~np.isnan(bob_2)).all(), 'Een leiding mist beide bob waardes.'
-
-if (np.isnan(bob_1) ^ np.isnan(bob_2)).any():
-    nanbobs = 0
-    if np.isnan(bob_1).any():
-        nanbob_1 = np.isnan(bob_1)
-        bob_1[nanbob_1] = bob_2[nanbob_1]
-        nanbobs += sum(nanbob_1)
-    if np.isnan(bob_2).any():
-        nanbob_2 = np.isnan(bob_2)
-        bob_2[nanbob_2] = bob_1[nanbob_2]
-        nanbobs += sum(nanbob_2)
-
-
-
-#%% bergingsberekening functie
-
 def bergingsberekening(
+        bemalingsgebied_naam,
+        bemalingsgebied_id,
         put_1,
         put_2,
         bob_1,
@@ -223,22 +154,22 @@ def bergingsberekening(
         vorm,
         hoogte,
         breedte,
-        begin_put,
+        afvoerputten,
         overstorten
         ):
     '''
     Parameters
     ----------
     put_1 : np.array of int
-        beginput id
+        beginput.
     put_2 : np.array of int
-        eindput id
+        eindput.
     bob_1 : np.array of float
-        bovenkant onderkant buis begin in [mNAP]
+        bovenkant onderkant buis begin.
     bob_2 : np.array of float
-        bob eind in [mNAP]
+        bob eind.
     lengte : np.array of float
-        lengte buis in [m]
+        lengte buis.
     vorm : np.array of varchar
         Vorm van de leiding.
         'RO': cilinder vormig (rond)
@@ -246,18 +177,18 @@ def bergingsberekening(
         'RE': rechthoekig
         'MU': muilvormig
     hoogte : np.array of float
-        hoogte/diameter buis  in [m]
+        hoogte/diameter buis.
     breedte : np.array of float, nullable
-        breedte buis  in [m]
-    begin_put : int
-        Afvoer put waar het gemaal geplaatst is.
+        breedte buis.
+    afvoerputten : np.array of int
+        Afvoerput ids waar de gemalen staan.
     overstorten : list or np.array
         Lijst aan overstortdrempel niveaus in het rioleringstelsel .
-
     Returns
     -------
-    None.
-
+    fig 
+        Figure of the bergingskromme.
+        
     '''
     putten = np.unique(np.concatenate([put_1, put_2])) #Unieke putten
     
@@ -296,9 +227,14 @@ def bergingsberekening(
     vorige_put = np.full(n, -1, dtype=np.int64)
     waterstand = np.full(n, Inf, dtype=np.float64) #Verloren waterstand
     
+    check = [(putten == afvoerput).any() for afvoerput in afvoerputten]
+    assert any(check), 'Geen van de afvoerputten {} is onderdeel van stelsel {}.'.format(afvoerputten, bemalingsgebied_naam)
+    
     # Zorg dat de bemalingsput/beginput leeg is, waterstand == bob
     # De -0.01 extra werd door Albert kemeling aanbevolen
-    waterstand[putten == beginput] = putbodem[putten == beginput] -.01
+    for afvoerput in afvoerputten:
+        waterstand[putten == afvoerput] = putbodem[putten == afvoerput] -.01
+
     ###Dijkstra
     while True:
         dist = Inf
@@ -331,8 +267,6 @@ def bergingsberekening(
                     vorige_put[j] = put_u
     
     
-
-    
     
     ### bergingskromme
     
@@ -340,6 +274,7 @@ def bergingsberekening(
     put_1_ws, put_2_ws = leiding_waterstand(putten, waterstand, put_1, put_2)
     
     N_streng = len(bob_1)
+    
     
     # De volgende arrays zijn ervoor om te verkomen dat het volle (verloren) volume
     # van strengen niet meerdere keren berekend wordt.
@@ -354,8 +289,9 @@ def bergingsberekening(
     list_volume_water = []
     list_volume_verlorenberging = []
     
+        
+    riool_waterstanden = np.arange(np.nanmin(putbodem), np.nanmax(waterstand), 0.05) # min: riool is leeg, max: riool is compleet gevuld
     
-    riool_waterstanden = np.arange(np.nanmin(putbodem), np.nanmax(waterstand), 0.01) # min: riool is leeg, max: riool is compleet gevuld
     
     for r_ws in riool_waterstanden:
         
@@ -377,7 +313,7 @@ def bergingsberekening(
             
             # Komt r_ws boven BBB uit? dan is de streng vol. 
             # Reken anders het gedeeltelijk volume uit
-            if (r_ws >= bob_1_ + h) & (r_ws >= bob_2_ + h):
+            if (r_ws >= (bob_1_ + h)) & (r_ws >= (bob_2_ + h)):
                 if bool_vol[i]:
                     volume_water_lei += vol_volume[i]
                 else:
@@ -399,7 +335,6 @@ def bergingsberekening(
             else:
                 verloren_berging += volume_berekenen(ws_ver_berg_1, ws_ver_berg_2, bob_1_, bob_2_, h, b, l, vorm_)
             
-        
         list_volume_water.append(volume_water_lei)
         list_volume_verlorenberging.append(verloren_berging)
     
@@ -409,6 +344,10 @@ def bergingsberekening(
     
     array_berging = array_volume_water - array_verlorenberging # totaal volume - verloren berging
     
+    b = riool_waterstanden < np.min(overstorten)
+    volume_ovs = np.nanmax(array_volume_water[b]) #hoogste watervolume onder de laagste overstort
+    verloren_berg_ovs = np.nanmax(array_verlorenberging[b])
+    berg_ovs = np.nanmax(array_berging[b])
     
     ### Plotting
     fig = plt.figure(figsize=(20,12))
@@ -420,13 +359,7 @@ def bergingsberekening(
         plt.plot([np.min(array_volume_water), np.max(array_volume_water)], [overstort, overstort])
     plt.xlabel('$m^3$')
     plt.ylabel('$mNAP$')
-    
-    
-    b = riool_waterstanden < np.min(overstorten)
-    
-    volume_ovs = np.max(array_volume_water[b])
-    verloren_berg_ovs = np.max(array_verlorenberging[b])
-    berg_ovs = np.max(array_berging[b])
+    plt.title(bemalingsgebied_id + ', ' + bemalingsgebied_naam)
     
     text = ('Overstortdrempel= {:.1f} $mNAP$ \nOnder overstort:\nTotaal volume= {:.2f} $m^3$'.format(np.min(overstorten), volume_ovs) +
     '\nVerloren berging = {:.2f} $m^3$\nBerging = {:.2f} $m^3$'.format(verloren_berg_ovs, berg_ovs))
@@ -436,34 +369,153 @@ def bergingsberekening(
     ax.text(0.70, 0.20, text, transform=ax.transAxes, fontsize=14,
             verticalalignment='top', bbox=props)
     
-    return fig    
+    return fig
+
+#%%
+import cx_Oracle as ora
+import os, traceback, time
+import numpy as np
+import matplotlib.pyplot as plt
+
+#%%
+
+folder = r'\\rotterdam.local\vdfs001\HOMEDIRECTORY\UserHome01\932829\Mijn Documenten\Bergingsberekening\Oracle connecties'
+
+
+sql_bemaling_link = 'bemalingsgebieden.sql'
+sql_strengen_link = 'strengen.sql'
+sql_overstorten_link = 'overstorten.sql'
+
+sql_bemaling = open(os.path.join(folder, sql_bemaling_link)).read()
+sql_strengen = open(os.path.join(folder, sql_strengen_link)).read()
+sql_overstorten = open(os.path.join(folder, sql_overstorten_link)).read()
+
+
+#%% Alle verschillende bemalingsgebieden + afvoerput ids ophalen
+with ora.connect('wmorplg', 'raadplegen_wmo', 'WMO.PROD') as con:
+    cur = con.cursor()
+    
+    
+    cur.execute(sql_bemaling)
+    
+    list = cur.fetchall()
+    columns = np.array(cur.description)[:, 0]
+    bemaling_temp = np.array(list)
+    bemaling_ids = bemaling_temp[:,0].astype(np.int)
+    bemalingsgebieden = []
+    # Bemalingsgebieden staan dubbel voor meer dan 1 afvoerput
+    # Hier worden de afvoerputten bij  hetzelfde bemalingsgebied gemerged
+    for gemaal_id in np.unique(bemaling_ids):
+        i = bemaling_ids == gemaal_id
+        
+        bemalingsgebied_naam = bemaling_temp[i][0, 1]
+        afvoerputten = bemaling_temp[i][:,2].astype(np.int)
+        bemalingsgebieden.append([gemaal_id, bemalingsgebied_naam, afvoerputten])
+
+#%% Loop over alle belangrijke bemalingsgebieden
+
+exception_N = 0
+for i in range(0, 200):
+    print(' Bergings berekening voor {}, {} \n'.format(bemalingsgebieden[i][0], bemalingsgebieden[i][1]))
+    try:
+        bemalingsgebied = bemalingsgebieden[i]
+        gemaal_id = str(bemalingsgebied[0])
+        gemaal_naam = bemalingsgebied[1]
+        afvoerputten = bemalingsgebied[2]
+        
+        # Query van de overstorten
+        with ora.connect('wmorplg', 'raadplegen_wmo', 'WMO.PROD') as con:
+            cur = con.cursor()
+            
+            
+            cur.execute(sql_overstorten, [gemaal_id])
+            
+            list = cur.fetchall()
+            ovs_col = np.array(cur.description)[:, 0]
+            ovs = np.array(list)
+        
+        #TO DO: warning not exception let op geen overstort
+        assert ovs.size != 0, 'Er zijn geen overstorten voor bemalingsgebied {}, {}'.format(gemaal_id, gemaal_naam)
+        ovs = ovs[:,2]
+        overstorten = [float(ov) for ov in ovs if ov != None]
+        #ovs[:,2][ovs[:,2] != None].astype(np.float)
+        
+        def queryLeidingen(gemaal_id):
+            with ora.connect('wmorplg', 'raadplegen_wmo', 'WMO.PROD') as con:
+                cur = con.cursor()
+                
+                cur.execute(sql_strengen, [gemaal_id])
+                fetched = cur.fetchall()
+                col_lei = np.array(cur.description)[:,0]
+                array_lei = np.array(fetched)
+                return array_lei, col_lei
+
+        # Query van de leidingen
+        array_lei, col_lei = queryLeidingen(gemaal_id)
+        
+        # Initialisatie van de belangrijke arrays
+        put_1 = array_lei[:,2].astype(np.int)
+        put_2 = array_lei[:,3].astype(np.int)
+        bob_1 = array_lei[:,4].astype(np.float)
+        bob_2 = array_lei[:,6].astype(np.float)
+        lengte = array_lei[:,8].astype(np.float)
+        vorm = array_lei[:,9]
+        hoogte = array_lei[:,10].astype(np.float)/1000
+        breedte = array_lei[:,11].astype(np.float)/1000
+        diameter = array_lei[:,12].astype(np.float)/1000
+        hoogte[~np.isnan(diameter)] = diameter[~np.isnan(diameter)]
+        
+        
+        # TO DO: melding hoeveel halve sets er zijn 
+        # Als een van de twee bob waardes mist wordt die vervangen door de andere.
+        if (np.isnan(bob_1) ^ np.isnan(bob_2)).any():
+            nanbobs = 0
+            if np.isnan(bob_1).any():
+                nanbob_1 = np.isnan(bob_1)
+                bob_1[nanbob_1] = bob_2[nanbob_1]
+                nanbobs += sum(nanbob_1)
+            if np.isnan(bob_2).any():
+                nanbob_2 = np.isnan(bob_2)
+                bob_2[nanbob_2] = bob_1[nanbob_2]
+                nanbobs += sum(nanbob_2)
+        
+        # Beide bob waardes van een leiding missen, deze kunnen essentieel zijn
+        # voor een bergingsberekening. Het algorithme geeft dan verkeerde waardes
+        # uit.
+        both_nanbobs = np.sum(np.isnan(bob_1) +  np.isnan(bob_2))
+        assert (~np.isnan(bob_1) +  ~np.isnan(bob_2)).all(), 'Bemalingsgebied:{} heeft {} leidingen die beide bob waardes missen.'.format(gemaal_naam, both_nanbobs)
+
+
+        dict_h = {
+            'bemalingsgebied_id':gemaal_id,
+            'bemalingsgebied_naam':gemaal_naam,
+            'put_1': put_1,
+            'put_2': put_2,
+            'bob_1': bob_1,
+            'bob_2': bob_2,
+            'lengte': lengte,
+            'vorm': vorm,
+            'hoogte': hoogte,
+            'breedte': breedte,
+            'afvoerputten': afvoerputten,
+            'overstorten': overstorten
+        }
+        
+        fig = bergingsberekening(**dict_h)
+
+        fig.savefig(os.path.join(r'\\rotterdam.local\vdfs001\HOMEDIRECTORY\UserHome01\932829\Mijn Documenten\Bergingsberekening\Test_01', gemaal_id + '_' + gemaal_naam + '.png'))
+
+    except AssertionError as e:
+        exception_N += 1
+        print(e)
+    except Exception as e:
+        print(traceback.format_exc())
+        exception_N += 1
+    print('-------------------\n')
 
 #%%
 
 
-ovs = [2, 1]
-beginput = 201829
-fig = bergingsberekening(put_1, put_2, bob_1, bob_2, lengte, vorm, hoogte, breedte, beginput, ovs)
-
-ax = fig.axes[0]
 
 
-#%% Afvoerend oppervlak
-df_afv = pd.read_csv('afv.csv', delimiter=';')
-nlei = len(put_1)
-
-geslhell = np.nansum(df_afv['gesl hell'])
-geslvlak = np.nansum(df_afv['gesl vlak'])
-gesluitg = np.nansum(df_afv['gesl uitg'])
-openhell = np.nansum(df_afv['open hell'])
-openvlak = np.nansum(df_afv['open vlak'])
-openuitg = np.nansum(df_afv['open uitg'])
-dakhell = np.nansum(df_afv['dak hell'])
-dakvlak = np.nansum(df_afv['dak vlak'])
-dakuitg = np.nansum(df_afv['dak uitg'])
-onvhell = np.nansum(df_afv['onv hell'])
-onvvlak = np.nansum(df_afv['onv vlak'])
-onvuitg = np.nansum(df_afv['onv uitg'])
-
-totaalvo = np.nansum([geslhell, geslvlak, gesluitg, openhell, openvlak, openuitg, dakhell, dakvlak, dakuitg, onvhell, onvvlak, onvuitg])
 
