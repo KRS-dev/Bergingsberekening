@@ -344,26 +344,33 @@ def bergingsberekening(
     
     array_berging = array_volume_water - array_verlorenberging # totaal volume - verloren berging
     
-    b = riool_waterstanden < np.min(overstorten)
-    volume_ovs = np.nanmax(array_volume_water[b]) #hoogste watervolume onder de laagste overstort
-    verloren_berg_ovs = np.nanmax(array_verlorenberging[b])
-    berg_ovs = np.nanmax(array_berging[b])
-    
     ### Plotting
     fig = plt.figure(figsize=(20,12))
     
     plt.plot(array_volume_water, riool_waterstanden, array_verlorenberging, riool_waterstanden, array_berging, riool_waterstanden)
     plt.legend(['Totale inhoud [$m^3$]', 'Verloren berging [$m^3$]',  'Berging [$m^3$]'])
-    
-    for overstort in overstorten:
-        plt.plot([np.min(array_volume_water), np.max(array_volume_water)], [overstort, overstort])
     plt.xlabel('$m^3$')
     plt.ylabel('$mNAP$')
     plt.title(bemalingsgebied_id + ', ' + bemalingsgebied_naam)
     
-    text = ('Overstortdrempel= {:.1f} $mNAP$ \nOnder overstort:\nTotaal volume= {:.2f} $m^3$'.format(np.min(overstorten), volume_ovs) +
-    '\nVerloren berging = {:.2f} $m^3$\nBerging = {:.2f} $m^3$'.format(verloren_berg_ovs, berg_ovs))
-    
+    if len(overstorten) > 0:
+        b = riool_waterstanden < np.min(overstorten)
+        volume_ovs = np.nanmax(array_volume_water[b]) #hoogste watervolume onder de laagste overstort
+        verloren_berg_ovs = np.nanmax(array_verlorenberging[b])
+        berg_ovs = np.nanmax(array_berging[b])
+        for overstort in overstorten:
+            plt.plot([np.min(array_volume_water), np.max(array_volume_water)], [overstort, overstort])
+
+        text = ('Overstortdrempel= {:.1f} $mNAP$ \nOnder overstort:\nTotaal volume= {:.f} $m^3$'.format(np.min(overstorten), volume_ovs) +
+        '\nVerloren berging = {:.f} $m^3$\nBerging = {:.f} $m^3$'.format(verloren_berg_ovs, berg_ovs))
+    else:
+        volume_max = np.nanmax(array_volume_water) #hoogste watervolume onder de laagste overstort
+        verloren_berg_max = np.nanmax(array_verlorenberging)
+        berg_max = np.nanmax(array_berging)
+        
+        text = ('Max volume= {:.f} $m^3$'.format(volume_max) +
+        '\nMax Verloren berging = {:.f} $m^3$\nMax Berging = {:.f} $m^3$'.format(verloren_berg_max, berg_max))
+        
     ax = plt.gca()
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     ax.text(0.70, 0.20, text, transform=ax.transAxes, fontsize=14,
@@ -376,6 +383,8 @@ import cx_Oracle as ora
 import os, traceback, time
 import numpy as np
 import matplotlib.pyplot as plt
+import logging, warnings
+warnings.simplefilter('error', UserWarning)
 
 #%%
 
@@ -417,10 +426,28 @@ with ora.connect('wmorplg', 'raadplegen_wmo', 'WMO.PROD') as con:
 exception_N = 0
 for i in range(0, 200):
     print(' Bergings berekening voor {}, {} \n'.format(bemalingsgebieden[i][0], bemalingsgebieden[i][1]))
+    
+    bemalingsgebied = bemalingsgebieden[i]
+    gemaal_id = str(bemalingsgebied[0])
+    gemaal_naam = bemalingsgebied[1]
+    
+    subfolder_name = gemaal_id.zfill(4) + '_' + gemaal_naam
+    subfolder = os.path.join(folder, subfolder_name)
+    if ~os.path.exists(subfolder):
+        os.mkdir(subfolder)
+    
+    log = logging.getLoggger(subfolder_name)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fileHandler = logging.FileHandler(os.path.join(subfolder, subfolder_name + '.log'), mode='w')
+    fileHandler.setFormatter(formatter)
+    log.setLevel(logging.INFO)
+    log.addHandler(fileHandler)    
+    
+    log.info('Start bergingsberekening voor %s', gemaal_naam)
+    
     try:
-        bemalingsgebied = bemalingsgebieden[i]
-        gemaal_id = str(bemalingsgebied[0])
-        gemaal_naam = bemalingsgebied[1]
+        
+        
         afvoerputten = bemalingsgebied[2]
         
         # Query van de overstorten
@@ -435,10 +462,14 @@ for i in range(0, 200):
             ovs = np.array(list)
         
         #TO DO: warning not exception let op geen overstort
-        assert ovs.size != 0, 'Er zijn geen overstorten voor bemalingsgebied {}, {}'.format(gemaal_id, gemaal_naam)
-        ovs = ovs[:,2]
-        overstorten = [float(ov) for ov in ovs if ov != None]
-        #ovs[:,2][ovs[:,2] != None].astype(np.float)
+        if ovs.size != 0:
+            ovs = ovs[:,2]
+            overstorten = [float(ov) for ov in ovs if ov != None]
+            log.info('%i overstorten gevonden.', len(overstorten))
+            #ovs[:,2][ovs[:,2] != None].astype(np.float)
+        else:
+            warnings.warn('Er zijn geen overstorten voor bemalingsgebied {}, {}'.format(gemaal_id, gemaal_naam))
+            log.warning('Er zijn geen overstorten gevonden.')
         
         def queryLeidingen(gemaal_id):
             with ora.connect('wmorplg', 'raadplegen_wmo', 'WMO.PROD') as con:
@@ -452,6 +483,8 @@ for i in range(0, 200):
 
         # Query van de leidingen
         array_lei, col_lei = queryLeidingen(gemaal_id)
+        
+        log.info('Er zijn %i strengen gevonden', len(array_lei[:,1]))
         
         # Initialisatie van de belangrijke arrays
         put_1 = array_lei[:,2].astype(np.int)
@@ -478,6 +511,12 @@ for i in range(0, 200):
                 nanbob_2 = np.isnan(bob_2)
                 bob_2[nanbob_2] = bob_1[nanbob_2]
                 nanbobs += sum(nanbob_2)
+           streng_ids = array_lei[:,0][(np.isnan(bob_1) ^ np.isnan(bob_2)).any()]
+           log.warning('%i strengen missen 1 of 2 bob\'s', nanbobs)
+           log.info('Streng ids:\n' + streng_ids.tostring())
+           warnings.warn('{} strengen missen 1 of 2 bob\'s'.format(nanbobs))
+                   
+        
         
         # Beide bob waardes van een leiding missen, deze kunnen essentieel zijn
         # voor een bergingsberekening. Het algorithme geeft dan verkeerde waardes
@@ -503,14 +542,17 @@ for i in range(0, 200):
         
         fig = bergingsberekening(**dict_h)
 
-        fig.savefig(os.path.join(r'\\rotterdam.local\vdfs001\HOMEDIRECTORY\UserHome01\932829\Mijn Documenten\Bergingsberekening\Test_01', gemaal_id + '_' + gemaal_naam + '.png'))
-
+        fig.savefig(os.path.join(subfolder, gemaal_id.zfill(4) + '_' + gemaal_naam + '.png'))
+        
+        
+        
     except AssertionError as e:
-        exception_N += 1
         print(e)
+        log.exception('Assertion Error')
     except Exception as e:
         print(traceback.format_exc())
-        exception_N += 1
+        log.exception('Exception Occurred')
+
     print('-------------------\n')
 
 #%%
