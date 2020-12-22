@@ -193,6 +193,7 @@ def bergingsberekening(
     putten = np.unique(np.concatenate([put_1, put_2])) #Unieke putten
     
     n = len(putten)
+    N_streng = len(bob_1)
     
     Inf = np.Infinity
     
@@ -266,29 +267,94 @@ def bergingsberekening(
                     vorige_i[j] = u
                     vorige_put[j] = put_u
     
-    
-    ### bergingskromme
-    
     #Verloren waterstand wordt bij beginput en eindput van elk streng gezocht
     put_1_ws, put_2_ws = leiding_waterstand(putten, waterstand, put_1, put_2)
     
-    N_streng = len(bob_1)
+    ### vervalputten
     
+    verval = np.full(n, -1, dtype=np.float)
+    verval_strengen = np.empty(n, dtype=object)
+    # Dijkstra geeft een stroomvolgorde aan (vorige_put naar put) voor
+    # het kritieke pad.
+    # Hiermee kunnen we makkelijk het verval per put berekenen op het
+    # kritieke pad.
+    kritieke_pad_strengen = np.full(N_streng, False, dtype=bool)
+    
+    for i, (vp, hp) in enumerate(zip(vorige_put, putten)):
+        ind_1 = (put_1 == hp) & (put_2 == vp)
+        ind_2 = (put_2 == hp) & (put_1 == vp)
+        if ind_1.any():
+            bob_temp = bob_2[ind_1]
+            ws = put_2_ws[ind_1]
+            if bob_temp > ws:
+                verval[i] = bob_temp - ws
+                verval_strengen[i] = str(put_1[ind_1][0]) + '-' + str(put_2[ind_1][0])
+            kritieke_pad_strengen[ind_2] = True
+        elif ind_1.any():
+            bob_temp = bob_1[ind_2]
+            ws = put_1_ws[ind_2]
+            if bob_temp > ws:
+                verval[i] = bob_temp - ws
+                verval_strengen[i] = str(put_1[ind_2][0]) + '-' + str(put_2[ind_2][0])
+            kritieke_pad_strengen[ind_1] = True
+    
+    # Voor de strengen die niet op het kritieke pad liggen is er de volgende
+    # berekening.
+    a = ~kritieke_pad_strengen
+    for bob_1_, bob_2_, put_1_, put_2_, ws_1, ws_2 in zip(bob_1[a], bob_2[a], put_1[a], put_2[a], put_1_ws[a], put_2_ws[a]):
+        # De stroomrichting wordt door de bob's bepaald, als de bob's gelijk 
+        # zijn dan wordt het verval naar beide putten uitgerekend.
+        if bob_2_ > bob_1_:
+            hp = put_1_
+            bob_hp = bob_1_
+            ws_hp = ws_1
+            if bob_hp > ws_hp:
+                ind = putten == hp
+                verval_hoogte = bob_hp - ws_hp
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+        elif bob_1_ > bob_2_:
+            hp = put_2_
+            bob_hp = bob_2_
+            ws_hp = ws_2
+            if bob_hp > ws_hp:
+                ind = putten == hp
+                verval_hoogte = bob_hp - ws_hp
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+        elif bob_1_ == bob_2_:
+            if bob_1_ > ws_1:
+                ind = putten == put_1_
+                verval_hoogte = bob_1_ - ws_1
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+            if bob_2_ > ws_2:
+                ind = putten == put_2_
+                verval_hoogte = bob_2_ - ws_2
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+                
+    
+    ### bergingskromme
     
     # De volgende arrays zijn ervoor om te verkomen dat het volle (verloren) volume
     # van strengen niet meerdere keren berekend wordt.
     # elke streng krijgt een ruimte om het volle volume op te slaan en de 
     # boolean: bool_vol en bool_vol_verloren zorgen ervoor dat ze bij de volgende
     # iteratie overgeslagen worden.
-    vol_volume = np.full(N_streng, 0, dtype=float) 
+    vol_volume = np.full(N_streng, np.nan, dtype=float) 
     bool_vol = np.full(N_streng, False, dtype=bool)
-    vol_verloren_volume = np.full(N_streng, 0, dtype=float)
+    vol_verloren_volume = np.full(N_streng, np.nan, dtype=float)
     bool_vol_verloren = np.full(N_streng, False, dtype=bool)
     
     list_volume_water = []
     list_volume_verlorenberging = []
   
-    riool_waterstanden = np.arange(np.nanmin(putbodem), np.nanmax(waterstand), 0.01) # min: riool is leeg, max: riool is compleet gevuld
+    riool_waterstanden = np.arange(np.nanmin(putbodem), np.nanmax(waterstand) + .01, 0.01) # min: riool is leeg, max: riool is compleet gevuld
     
     
     for r_ws in riool_waterstanden:
@@ -343,7 +409,7 @@ def bergingsberekening(
     array_berging = array_volume_water - array_verlorenberging # totaal volume - verloren berging
     
     info_berging = np.column_stack([np.array(riool_waterstanden), array_volume_water, array_verlorenberging, array_berging])
-    info_dijkstra = np.column_stack([putten, putbodem, waterstand])
+    info_putten = np.column_stack([putten, vorige_put, putbodem, waterstand, verval, verval_strengen])
     info_strengen = np.column_stack([put_1, put_2, bob_1, bob_2, put_1_ws, put_2_ws,lengte, hoogte, vol_volume, vol_verloren_volume, vol_verloren_volume/vol_volume])
     
     ### Plotting
@@ -353,7 +419,7 @@ def bergingsberekening(
     plt.legend(['Totale inhoud [$m^3$]', 'Verloren berging [$m^3$]',  'Berging [$m^3$]'])
     plt.xlabel('$m^3$')
     plt.ylabel('$mNAP$')
-    plt.title(bemalingsgebied_id + ', ' + bemalingsgebied_naam)
+    plt.title(str(bemalingsgebied_id) + ', ' + bemalingsgebied_naam)
     
     if len(overstorten) > 0:
         b = riool_waterstanden < np.min(overstorten)
@@ -378,7 +444,7 @@ def bergingsberekening(
     ax.text(0.70, 0.20, text, transform=ax.transAxes, fontsize=14,
             verticalalignment='top', bbox=props)
     
-    return fig, info_berging, info_dijkstra, info_strengen
+    return fig, info_berging, info_putten, info_strengen
 
 #%%
 import cx_Oracle as ora
@@ -543,11 +609,12 @@ for i in range(0, 100):
             'overstorten': overstorten
         }
         log.info('Berekening Berging')
-        fig, info_berging, info_waterstand = bergingsberekening(**dict_h)
+        fig, info_berging, info_putten, info_strengen = bergingsberekening(**dict_h)
         log.info('Bergingsberekening wordt opgeslagen in %s', subfolder)
         
         np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_berging.txt'), info_berging, delimiter=';', fmt='%4.2f;%.2f;%.2f;%.2f', header='Riool Waterstand[mNAP];Volume Water[m3];Verloren Berging[m3];Berging[m3]')
-        np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_dijkstra.txt'), info_waterstand, delimiter=';', fmt='%i;%.2f;%.2f', header='Putten;Putbodem[mNAP];Waterstand[mNAP]')
+        np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_putten.txt'), info_putten, delimiter=';', fmt='%i;%.2f;%.2f', header='Put;Vorige Put;Putbodem[mNAP];Waterstand[mNAP];Verval Hoogte[m];Verval Streng')
+        np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_strengen.txt'), info_strengen, delimiter=';', fmt='%i;%i;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.3f;%.3f;%.2f', header='put 1;put 2;bob 1[mNAP];bob 2[mNAP];ws 1[mNAP];ws 2[mNAP];Lengte[m];Hoogte[m];Totaal Volume[m3];Verloren Volume[m3];Ratio')
         fig.savefig(os.path.join(subfolder, gemaal_id.zfill(4) + '_' + gemaal_naam + '.png'))
         
         log.info('Succes!')
