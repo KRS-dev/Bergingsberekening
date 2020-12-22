@@ -264,6 +264,7 @@ def bergingsberekening(
     putten = np.unique(np.concatenate([put_1, put_2])) #Unieke putten
     
     n = len(putten)
+    N_streng = len(bob_1)
     
     Inf = np.Infinity
     
@@ -337,25 +338,79 @@ def bergingsberekening(
                     vorige_i[j] = u
                     vorige_put[j] = put_u
     
-    
-    ### vervalputten
-    
-    strengen = np.column_stack([put_1, put_2, bob_1, bob_2])
-    verval = np.full(n, np.nan, dtype=np.float)
-    for i, (vput, put_, putb) in enumerate(zip(vorige_put, putten, putbodem)):
-        ind = (strengen[:,0] == vput) & (strengen[:,1] == put_)
-        temp = strengen[:,3][ind]
-        print(temp)
-        if len(temp) == 1:
-            temp2 = temp - putb
-            verval[i] = temp2
-    ### bergingskromme
-    
     #Verloren waterstand wordt bij beginput en eindput van elk streng gezocht
     put_1_ws, put_2_ws = leiding_waterstand(putten, waterstand, put_1, put_2)
     
-    N_streng = len(bob_1)
+    ### vervalputten
     
+    verval = np.full(n, -1, dtype=np.float)
+    verval_strengen = np.empty(n, dtype=object)
+    # Dijkstra geeft een stroomvolgorde aan (vorige_put naar put) voor
+    # het kritieke pad.
+    # Hiermee kunnen we makkelijk het verval per put berekenen op het
+    # kritieke pad.
+    kritieke_pad_strengen = np.full(N_streng, False, dtype=bool)
+    
+    for i, (vp, hp) in enumerate(zip(vorige_put, putten)):
+        ind_1 = (put_1 == hp) & (put_2 == vp)
+        ind_2 = (put_2 == hp) & (put_1 == vp)
+        if ind_1.any():
+            bob_temp = bob_2[ind_1]
+            ws = put_2_ws[ind_1]
+            if bob_temp > ws:
+                verval[i] = bob_temp - ws
+                verval_strengen[i] = str(put_1[ind_1][0]) + '-' + str(put_2[ind_1][0])
+            kritieke_pad_strengen[ind_2] = True
+        elif ind_1.any():
+            bob_temp = bob_1[ind_2]
+            ws = put_1_ws[ind_2]
+            if bob_temp > ws:
+                verval[i] = bob_temp - ws
+                verval_strengen[i] = str(put_1[ind_2][0]) + '-' + str(put_2[ind_2][0])
+            kritieke_pad_strengen[ind_1] = True
+    
+    # Voor de strengen die niet op het kritieke pad liggen is er de volgende
+    # berekening.
+    a = ~kritieke_pad_strengen
+    for bob_1_, bob_2_, put_1_, put_2_, ws_1, ws_2 in zip(bob_1[a], bob_2[a], put_1[a], put_2[a], put_1_ws[a], put_2_ws[a]):
+        # De stroomrichting wordt door de bob's bepaald, als de bob's gelijk 
+        # zijn dan wordt het verval naar beide putten uitgerekend.
+        if bob_2_ > bob_1_:
+            hp = put_1_
+            bob_hp = bob_1_
+            ws_hp = ws_1
+            if bob_hp > ws_hp:
+                ind = putten == hp
+                verval_hoogte = bob_hp - ws_hp
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+        elif bob_1_ > bob_2_:
+            hp = put_2_
+            bob_hp = bob_2_
+            ws_hp = ws_2
+            if bob_hp > ws_hp:
+                ind = putten == hp
+                verval_hoogte = bob_hp - ws_hp
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+        elif bob_1_ == bob_2_:
+            if bob_1_ > ws_1:
+                ind = putten == put_1_
+                verval_hoogte = bob_1_ - ws_1
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+            if bob_2_ > ws_2:
+                ind = putten == put_2_
+                verval_hoogte = bob_2_ - ws_2
+                if verval[ind] < verval_hoogte:
+                    verval[ind] = verval_hoogte
+                    verval_strengen[ind] = str(put_1_) + '-' + str(put_2_)
+                
+    
+    ### bergingskromme
     
     # De volgende arrays zijn ervoor om te verkomen dat het volle (verloren) volume
     # van strengen niet meerdere keren berekend wordt.
@@ -425,7 +480,7 @@ def bergingsberekening(
     array_berging = array_volume_water - array_verlorenberging # totaal volume - verloren berging
     
     info_berging = np.column_stack([np.array(riool_waterstanden), array_volume_water, array_verlorenberging, array_berging])
-    info_putten = np.column_stack([putten, vorige_put, putbodem, waterstand, verval])
+    info_putten = np.column_stack([putten, vorige_put, putbodem, waterstand, verval, verval_strengen])
     info_strengen = np.column_stack([put_1, put_2, bob_1, bob_2, put_1_ws, put_2_ws,lengte, hoogte, vol_volume, vol_verloren_volume, vol_verloren_volume/vol_volume])
     
     ### Plotting
