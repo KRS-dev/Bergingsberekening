@@ -256,7 +256,7 @@ def bergingsberekening(
         
         wachtrij[u] = False
         
-        for j, put_ in enumerate(putten):
+        for j, put_j in enumerate(putten):
             if wachtrij[j] and bob_graaf[u, j] != Inf:
                 
                 if np.isnan(bob_graaf[u, j]):
@@ -282,7 +282,7 @@ def bergingsberekening(
     verval_strengen = np.empty(n, dtype=object)
     # Dijkstra geeft een stroomvolgorde aan (vorige_put naar put) voor
     # het kritieke pad.
-    # Hiermee kunnen we makkelijk het verval per put berekenen op het
+    # Hiermee kunnen we gemakkelijk het verval per put berekenen op het
     # kritieke pad.
     kritieke_pad_strengen = np.full(N_streng, False, dtype=bool)
     
@@ -370,6 +370,15 @@ def bergingsberekening(
         
         for i, (put_1_ws_, put_2_ws_, bob_1_, bob_2_, l, b, vorm_, h) in enumerate(zip(put_1_ws, put_2_ws, bob_1, bob_2, lengte, breedte, vorm, hoogte)):
             
+            # Als beide bob's missen dan berekenen we het volume niet voor deze buis
+            # Als 1 bob mist, bob_1 == bob_2, de tweede lijn is misschien overbodig
+            # vanwege de check die eerder gedaan wordt maar geeft wel extra robuustheid
+            # voor veranderingen.
+            if np.isnan(bob_1_) & np.isnan(bob_2_):
+                continue # Skip this loop
+            elif np.isnan(bob_1_) | np.isnan(bob_2_):
+                bob_1_ = bob_2_ = np.nanmax([bob_1_, bob_2_])
+
             # Als de riool waterstand hoger is dan verloren berging waterstand dan h
             if r_ws >= put_1_ws_:
                 ws_ver_berg_1 = put_1_ws_
@@ -597,7 +606,7 @@ for i in range(0, 100):
             # voor een bergingsberekening. Het algorithme geeft dan verkeerde waardes
             # uit.
             both_nanbobs = np.sum(nanbob_1 + nanbob_2)
-            assert (nanbob_2 & nanbob_2).all(), 'Er zijn {} strengen die beide bob waardes missen.'.format(both_nanbobs)
+            #assert (nanbob_2 & nanbob_2).all(), 'Er zijn {} strengen die beide bob waardes missen.'.format(both_nanbobs)
 
 
         dict_h = {
@@ -619,7 +628,7 @@ for i in range(0, 100):
         log.info('Bergingsberekening wordt opgeslagen in %s', subfolder)
         
         np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_berging.txt'), info_berging, delimiter=';', fmt='%4.2f;%.2f;%.2f;%.2f', header='Riool Waterstand[mNAP];Volume Water[m3];Verloren Berging[m3];Berging[m3]')
-        np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_putten.txt'), info_putten, delimiter=';', fmt='%i;%.2f;%.2f', header='Put;Vorige Put;Putbodem[mNAP];Waterstand[mNAP];Verval Hoogte[m];Verval Streng')
+        np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_putten.txt'), info_putten, delimiter=';', fmt='%i;%i;%.2f;%.2f;%.2f;%s', header='Put;Vorige Put;Putbodem[mNAP];Waterstand[mNAP];Verval Hoogte[m];Verval Streng')
         np.savetxt(os.path.join(subfolder, gemaal_id.zfill(4) + '_strengen.txt'), info_strengen, delimiter=';', fmt='%i;%i;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.3f;%.3f;%.2f', header='put 1;put 2;bob 1[mNAP];bob 2[mNAP];ws 1[mNAP];ws 2[mNAP];Lengte[m];Hoogte[m];Totaal Volume[m3];Verloren Volume[m3];Ratio')
         fig.savefig(os.path.join(subfolder, gemaal_id.zfill(4) + '_' + gemaal_naam + '.png'))
         
