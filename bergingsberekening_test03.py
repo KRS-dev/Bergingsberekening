@@ -217,10 +217,12 @@ def bergingsberekening(
                 if putbodem[j] > bob_2_:
                     putbodem[j] = bob_2_
         
-        
-        bob_graaf[j1, j2] = max([bob_1_, bob_2_])
-        # Bob graafmatrix is symmetrisch
-        bob_graaf[j2, j1] = bob_graaf[j1,j2]
+        if np.isnan(bob_1_) & np.isnan(bob_2_):
+            # Bob graafmatrix is symmetrisch
+            bob_graaf[j1, j2] = bob_graaf[j2, j1] = np.nan
+        else:
+            bob_graaf[j1, j2] = bob_graaf[j2, j1] = np.nanmax([bob_1_, bob_2_])
+
         
         
     wachtrij = np.full(n, True, dtype=bool)
@@ -256,7 +258,11 @@ def bergingsberekening(
         
         for j, put_ in enumerate(putten):
             if wachtrij[j] and bob_graaf[u, j] != Inf:
-              
+                
+                if np.isnan(bob_graaf[u, j]):
+                    bob_graaf[u, j] = waterstand[u]
+
+
                 if waterstand[u] > bob_graaf[u, j]:
                     alt = waterstand[u]
                 else:
