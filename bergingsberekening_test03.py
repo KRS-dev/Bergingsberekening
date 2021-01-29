@@ -261,6 +261,18 @@ def bergingsberekening(
                 
                 if np.isnan(bob_graaf[u, j]):
                     bob_graaf[u, j] = waterstand[u]
+                    
+                    # BOB hoogte van de gelijk aan de waterstand zetten voor de streng waarvan bob's missen
+                    a = (put_1 == putten[u]) & (put_2 == putten[j])
+                    if a.all():
+                        ind = put_1==putten[u]
+                        bob_1[ind] = bob_2[ind] = waterstand[u]
+
+                    b = (put_1 == putten[j]) & (put_2 == putten[u])
+                    if b.all():
+                        ind = put_1 == putten[j]
+                        bob_1[ind] = bob_2[ind] = waterstand[u]
+
 
 
                 if waterstand[u] > bob_graaf[u, j]:
